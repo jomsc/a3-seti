@@ -1,5 +1,3 @@
--- Bloc memoire du cours : reset asynchrone, raz synchrone, chargement.
--- Sans raz ni ld, le registre conserve sa valeur.
 library ieee;
 use ieee.std_logic_1164.all;
 

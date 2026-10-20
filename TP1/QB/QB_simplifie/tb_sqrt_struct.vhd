@@ -1,6 +1,3 @@
--- Banc de test simple et autonome : aucun fichier de vecteurs a charger.
--- La question B demande une simulation avec n=32 (A sur 64 bits).
--- Les wait et les delais sont reserves a la simulation, pas au circuit.
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -31,7 +28,7 @@ begin
     end process;
 
     stimulus : process
-        -- Observer les valeurs APRES la mise a jour des registres et de done.
+
         procedure tick is
         begin
             wait until rising_edge(clk);
@@ -43,15 +40,15 @@ begin
                            maintenir_start : boolean := false) is
         begin
             A <= valeur; start <= '1';
-            tick; -- F0 : start accepte, entree dans init_state.
+            tick;
             assert done = '0' report "done pendant init" severity failure;
             if not maintenir_start then start <= '0'; end if;
-            tick; -- F1 : capture A, R=Z=0, entree dans comp_state.
+            tick;
             assert done = '0' and unsigned(S) = 0
                 report "Initialisation incorrecte" severity failure;
-            A <= not valeur; -- Apres capture, A ne doit plus intervenir.
+            A <= not valeur;
             for k in 1 to n loop
-                tick; -- Une iteration COMPLETE au front courant.
+                tick;
                 if k < n then
                     assert done = '0' report "Fin prematuree" severity failure;
                 else
@@ -65,7 +62,7 @@ begin
                     report "Resultat non conserve" severity failure;
                 start <= '0';
             end if;
-            tick; -- Retour en attente ; done retombe.
+            tick;
             assert done = '0' and S = attendu
                 report "Retour en attente incorrect" severity failure;
         end procedure;
@@ -75,19 +72,17 @@ begin
             report "Reset incorrect" severity failure;
         reset <= '0'; tick;
 
-        -- Petits nombres, carres parfaits et leurs voisins.
-        verifier(x"0000000000000000", x"00000000"); -- 0 -> 0
-        verifier(x"0000000000000001", x"00000001"); -- 1 -> 1
-        verifier(x"0000000000000002", x"00000001"); -- 2 -> 1
-        verifier(x"0000000000000003", x"00000001"); -- 3 -> 1
-        verifier(x"0000000000000004", x"00000002"); -- 4 -> 2
-        verifier(x"0000000000000009", x"00000003"); -- 9 -> 3
-        verifier(x"000000000000000F", x"00000003"); -- 15 -> 3
-        verifier(x"0000000000000010", x"00000004"); -- 16 -> 4
-        verifier(x"0000000000000011", x"00000004"); -- 17 -> 4
-        verifier(x"0000000000000064", x"0000000A"); -- 100 -> 10
+        verifier(x"0000000000000000", x"00000000");
+        verifier(x"0000000000000001", x"00000001");
+        verifier(x"0000000000000002", x"00000001");
+        verifier(x"0000000000000003", x"00000001");
+        verifier(x"0000000000000004", x"00000002");
+        verifier(x"0000000000000009", x"00000003");
+        verifier(x"000000000000000F", x"00000003");
+        verifier(x"0000000000000010", x"00000004");
+        verifier(x"0000000000000011", x"00000004");
+        verifier(x"0000000000000064", x"0000000A");
 
-        -- Valeurs qui depassent un entier signe classique sur 32 bits.
         verifier(x"00000000FFFFFFFF", x"0000FFFF");
         verifier(x"0000000100000000", x"00010000");
         verifier(x"FFFFFFFE00000000", x"FFFFFFFE");
@@ -95,7 +90,6 @@ begin
         verifier(x"FFFFFFFE00000002", x"FFFFFFFF");
         verifier(x"FFFFFFFFFFFFFFFF", x"FFFFFFFF", true);
 
-        -- Interrompre une operation apres quelques iterations.
         A <= (others => '1'); start <= '1'; tick;
         start <= '0'; tick;
         for k in 1 to 3 loop tick; end loop;
@@ -107,7 +101,7 @@ begin
             tick;
             assert done = '0' report "Calcul annule encore actif" severity failure;
         end loop;
-        verifier(x"0000000000000010", x"00000004"); -- Redemarrage.
+        verifier(x"0000000000000010", x"00000004");
 
         report "PASS : 17 calculs, 32 iterations par calcul, reset et start/done";
         termine <= true;

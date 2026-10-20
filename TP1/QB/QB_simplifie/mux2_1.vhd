@@ -1,5 +1,3 @@
--- Multiplexeur combinatoire du cours : sel=0 choisit I0, sel=1 choisit I1.
--- Aucun front d horloge necessaire pour selectionner une entree.
 library ieee;
 use ieee.std_logic_1164.all;
 

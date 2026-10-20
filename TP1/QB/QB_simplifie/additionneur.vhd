@@ -1,5 +1,3 @@
--- Unique additionneur du chemin de donnees, comme le bloc adder du cours.
--- Addition sur nb_bits bits, modulo 2**nb_bits ; voir LIRE_MOI.md.
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;

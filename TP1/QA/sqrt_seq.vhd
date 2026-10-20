@@ -20,7 +20,6 @@ entity sqrt_seq is
 
 end entity sqrt_seq;
 
-
 architecture sqrt_seq_proc of sqrt_seq is
 
     signal D : unsigned(2*n-1 downto 0);

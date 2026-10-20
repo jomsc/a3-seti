@@ -1,8 +1,3 @@
--- Unite de controle inspiree de control_unit / CSM / NSC / OC du cours.
--- Les commandes init/calcul/done sont COMBINATOIRES a partir de l'etat.
--- Les enregistrer ajouterait un retard d'un cycle vers les registres.
--- Les signes RC0 et RC1 pilotent directement les mux du chemin de donnees :
--- ils n'ont pas a changer l'etat, car les deux branches prennent un cycle.
 library ieee;
 use ieee.std_logic_1164.all;
 
@@ -27,7 +22,7 @@ begin
             if current_state = init_state then
                 i <= n-1;
             elsif current_state = comp_state then
-                -- i=0 est la DERNIERE iteration, elle est bien executee.
+
                 if i > 0 then
                     i <= i-1;
                 end if;
@@ -37,7 +32,7 @@ begin
 
     NSC : process(current_state, start, i)
     begin
-        next_state <= current_state; -- Valeur par defaut : aucun latch.
+        next_state <= current_state;
         case current_state is
             when wait_state =>
                 if start = '1' then next_state <= init_state; end if;
@@ -52,7 +47,7 @@ begin
 
     OC : process(current_state)
     begin
-        -- Valeurs par defaut pour TOUTES les sorties combinatoires.
+
         init <= '0';
         calcul <= '0';
         done <= '0';

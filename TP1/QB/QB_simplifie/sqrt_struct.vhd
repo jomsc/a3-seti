@@ -1,5 +1,3 @@
--- Sommet structurel, comme seq_det dans le cours : uniquement assemblage.
--- CU commande les registres de DP ; DP calcule une iteration par cycle.
 library ieee;
 use ieee.std_logic_1164.all;
 
