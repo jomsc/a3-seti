@@ -1,0 +1,67 @@
+# macOS / Windows metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editor backups and local settings
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ModelSim / Questa compiled libraries and simulation output
+work/
+questa_lib/
+modelsim_lib/
+modelsim.ini
+transcript
+vsim.wlf
+*.wlf
+*.vstf
+vsim_stacktrace.vstf
+vsim.dbg
+wlft*
+
+# GHDL compilation and waveform output
+*-obj*.cf
+*.o
+*.ghw
+*.vcd
+*.fst
+
+# FPGA build output (keep project files, constraints, and IP sources)
+db/
+incremental_db/
+output_files/
+.qsys_edit/
+.Xil/
+*.cache/
+*.runs/
+*.sim/
+*.hw/
+*.jou
+*.str
+
+# Dedicated build directories
+build/
+
+# LaTeX intermediate files (keep .tex, images, and PDFs)
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.blg
+*.run.xml
+*.xdv
+_minted*/
