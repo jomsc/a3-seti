@@ -1,4 +1,7 @@
--- Question 1.b : traduction structurelle de chemin_donnees.drawio.
+-- Question 1.b : chemin de donnees de votre schema.
+-- Tous les decalages sont des CONNEXIONS de bits : aucun processus,
+-- aucune horloge et aucun etat supplementaire pour les realiser.
+-- Les affectations concurrentes decrivent des circuits actifs en parallele.
 -- RC0 = signe de l'ANCIEN R ; RC1 = signe du NOUVEAU R.
 -- Convention : RC0/RC1 valent 1 si le nombre correspondant est >= 0.
 -- Les blocs de comparaison ne transportent pas le bus : ils prelevent
@@ -9,7 +12,6 @@
 -- avec 0 <= Z <= 2**k-1. Voir la preuve et le calcul modulo dans le guide.
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 
 entity chemin_donnees is
     generic (n : positive := 32);
@@ -41,8 +43,9 @@ begin
     -- Decaler R de DEUX bits, et non d'un, pour multiplier par 4.
     -- La paire est la division entiere D / 2**(2*n-2).
     -- Aucun diviseur : on prend simplement les deux bits superieurs.
-    r_shift <= std_logic_vector(shift_left(unsigned(r_q), 2));
-    paire <= std_logic_vector(resize(unsigned(d_q(2*n-1 downto 2*n-2)), W));
+    r_shift <= r_q(W-3 downto 0) & "00";
+    paire(W-1 downto 2) <= (others => '0');
+    paire(1 downto 0) <= d_q(2*n-1 downto 2*n-2);
     -- Les deux bits bas de r_shift sont nuls ; les autres bits de paire
     -- sont nuls. Les zones ne se recouvrent pas : OR equivaut ici a +.
     op_a <= r_shift or paire;
@@ -80,7 +83,13 @@ begin
 
     -- D avance de DEUX bits par iteration, modulo 2**(2*n).
     -- Les bits elimines sont justement la paire deja consommee.
-    d_shift <= std_logic_vector(shift_left(unsigned(d_q), 2));
+    -- Cas n=1 : les deux bits ont ete consommes, il ne reste que "00".
+    D_UNE_PAIRE : if n = 1 generate
+        d_shift <= "00";
+    end generate;
+    D_PLUSIEURS_PAIRES : if n > 1 generate
+        d_shift <= d_q(2*n-3 downto 0) & "00";
+    end generate;
     MUX_D : entity work.mux2_1(proced)
         generic map (nb_bits => 2*n)
         port map (I0 => d_shift, I1 => A, sel => init, S => d_next);
