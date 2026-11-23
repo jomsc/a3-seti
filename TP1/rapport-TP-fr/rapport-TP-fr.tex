@@ -83,8 +83,9 @@
 		\vspace{2cm}
 		\HRule{1.5pt} \\ [0.5cm]
 		\LARGE \textbf{\Large{RAPPORT DE TP}\\ [5mm]
-		\huge{\textcolor{parissaclay}{TP 1 : Calcul de racine carrée}}}
+		\huge{\textcolor{parissaclay}{Calcul de racine carrée}}}
 		\HRule{1.5pt} \\ [3mm]
+\large TP1 : VHDL \quad / \quad TP2 : Nios II \\[3mm]
 		
 		\normalsize
 		\vspace{1cm}
@@ -104,10 +105,12 @@
 	\maketitle % Page de titre
 \clearpage
 \pagestyle{main}
-\section{Architecture séquentielle comportementale}
-\subsection{Principe et graphe d’état}
-\textbf{Question a).} Nous cherchons à calculer la racine carrée entière d’un nombre non signé $A$ codé sur $2n$ bits, avec un résultat sur $n$ bits. La description doit être synthétisable, utiliser un seul processus et réaliser chacune des $n$ itérations en un cycle. Le résultat attendu est $Z=\lfloor\sqrt{A}\rfloor$, ce qui se vérifie par $Z^2\leq A<(Z+1)^2$.
 
+\part*{TP1 : VHDL}
+\section*{a) Architecture séquentielle comportementale}
+Nous calculons $Z=\lfloor\sqrt{A}\rfloor$, avec $A$ non signé sur $2n$ bits et $Z$ sur $n$ bits. Pour $n=32$, l’entrée a 64 bits et le résultat 32 bits. Le processus horlogé \texttt{PCalc} de \texttt{sqrt\_seq.vhd} regroupe la commande et le calcul, avec une itération par cycle.
+
+\subsection*{Principe et automate}
 \begin{figure}[H]
     \centering
     \includegraphics[width=.83\linewidth,height=9.3cm,keepaspectratio]{images/graphe_detat.png}
@@ -115,109 +118,31 @@
     \label{fig:etats}
 \end{figure}
 
-Le graphe de la figure~\ref{fig:etats} sépare l’attente, le chargement, le calcul et la fin du traitement. Il correspond aux quatre états du type énuméré utilisé dans \texttt{sqrt\_seq.vhd} :
-\begin{itemize}
-    \item \texttt{wait\_state} : mise à zéro de $D$, $R$, $Z$, du compteur et de \texttt{done}. Le circuit attend \texttt{start = '1'} pour passer à l’initialisation.
-    \item \texttt{init\_state} : chargement de $A$ dans $D$, remise à zéro des autres données, puis passage au calcul au cycle suivant.
-    \item \texttt{comp\_state} : exécution d’une itération par front montant. L’état est conservé tant que $i<n-1$ ; la dernière itération conduit à \texttt{end\_state}.
-    \item \texttt{end\_state} : \texttt{done} passe à 1. Le résultat est conservé ; le circuit reste dans cet état si \texttt{start = '1'}, sinon il retourne à l’attente.
-\end{itemize}
-Les actions des états sont exécutées aux fronts montants de l’horloge. Le reset actif à 1 impose l’état d’attente de manière asynchrone ; les données sont ensuite initialisées au front exécutant cet état. Le compteur part de $i=0$ et parcourt les valeurs de 0 à $n-1$, soit exactement $n$ itérations. La boucle de calcul est empruntée si $i<n-1$ ; si $i=n-1$, le circuit effectue la dernière itération puis passe à l’état de fin. Les conditions portent sur la valeur du compteur avant sa mise à jour. Pour $n=32$, les indices vont donc de 0 à 31.
+L’automate passe par quatre états : \texttt{wait\_state} initialise les données et attend \texttt{start}, \texttt{init\_state} charge $A$, \texttt{comp\_state} effectue les itérations, puis \texttt{end\_state} active \texttt{done}. Le compteur parcourt les indices 0 à $n-1$, soit 32 itérations. La dernière est exécutée avant de quitter l’état de calcul.
 
-Dans le graphe, la division $D/2^{2n-2}$ désigne une division entière, réalisée dans le code en sélectionnant les deux bits de poids fort de $D$. L’incrément indiqué dans l’état de calcul s’applique aux itérations non finales : le code effectue $i\leftarrow i+1$ lorsque $i<n-1$ et remet $i$ à zéro à la dernière itération. Le premier test de signe utilise l’ancien reste $R$ ; le second utilise le reste qui vient d’être calculé. Cette distinction permet de produire un bit de racine à chaque cycle.
+Le reset actif à 1 force l’état d’attente de façon asynchrone ; les données sont initialisées au front exécutant cet état. L’entrée doit rester stable jusqu’à son chargement dans $D$. Le résultat est lu avec \texttt{done=1}. Maintenir \texttt{start=1} conserve l’état final ; après son retour à 0, le circuit revient en attente et efface les données au front exécutant cet état.
 
 \clearpage
-\pagestyle{main}
-\subsection{Algorithme et choix des types}
-L’algorithme construit la racine bit par bit, en traitant les bits de $A$ par paires, depuis les poids forts. Au début d’une itération, on extrait $p=D(2n-1\ \mathrm{downto}\ 2n-2)$, soit un entier entre 0 et 3. Avec les anciennes valeurs de $R$ et $Z$, on calcule :
+\subsection*{Calcul d’une itération}
+À chaque cycle, nous extrayons les deux bits supérieurs de $D$, notés $p$. Le nouveau reste utilise les anciennes valeurs de $R$ et $Z$ :
 \[
-R_{\mathrm{nouveau}}=
-\begin{cases}
-4R+p-(4Z+1), & R\geq 0,\\
-4R+p+(4Z+3), & R<0.
-\end{cases}
+R'=\begin{cases}4R+p-(4Z+1),&R\geq0,\\4R+p+(4Z+3),&R<0.\end{cases}
+\qquad
+Z'=\begin{cases}2Z+1,&R'\geq0,\\2Z,&R'<0.\end{cases}
 \]
-Le signe du \emph{nouveau} reste détermine ensuite le bit ajouté à la racine :
+Puis $D'=(4D)\bmod 2^{2n}$ présente la paire suivante. Les multiplications par 2 et 4 sont des décalages ; l’extraction de $p$ remplace la division entière du sujet.
+
+$D$ est un signal \texttt{unsigned} de 64 bits, $Z$ un signal \texttt{unsigned} de 32 bits et $R$ une variable \texttt{signed} de 34 bits. Nous utilisons \texttt{numeric\_std} et \texttt{resize} pour les opérations et les changements de largeur. Le compteur est borné de 0 à 31.
+
+La variable $R$ est mise à jour immédiatement avec \texttt{:=}. Le second test lit donc le nouveau reste, alors que le premier utilise l’ancien. $R$ conserve sa valeur entre deux fronts et correspond bien à une mémoire. Les signaux $D$ et $Z$ sont mis à jour après l’exécution du processus. Toute l’itération tient ainsi dans un cycle.
+
+\subsection*{Temps de calcul}
+Les itérations occupent $n$ cycles. Depuis le front acceptant \texttt{start}, le résultat est final après $n+1$ périodes et \texttt{done} arrive après $n+2$ :
 \[
-Z_{\mathrm{nouveau}}=
-\begin{cases}
-2Z+1, & R_{\mathrm{nouveau}}\geq 0,\\
-2Z, & R_{\mathrm{nouveau}}<0.
-\end{cases}
-\qquad D_{\mathrm{nouveau}}=(4D)\bmod 2^{2n}.
+t_{\mathrm{itérations}}=nT_{\mathrm{clk}},\qquad
+ t_{\mathrm{acceptation}\rightarrow\mathrm{done}}=(n+2)T_{\mathrm{clk}}.
 \]
-Les multiplications par 2 et par 4 sont réalisées par des décalages à gauche de un ou deux bits. L’extraction des deux bits de poids fort remplace la division entière par $2^{2n-2}$. Le décalage de $D$ élimine la paire déjà traitée et présente la suivante. Il n’est donc pas nécessaire d’utiliser un diviseur ou un multiplicateur général.
-
-\begin{table}[H]
-\centering
-\small
-\renewcommand{\arraystretch}{1.22}
-\begin{tabularx}{\linewidth}{@{}p{2.7cm}p{4.5cm}X@{}}
-\toprule
-\textbf{Élément} & \textbf{Type et taille pour $n=32$} & \textbf{Rôle et justification}\\
-\midrule
-\texttt{clk, rst, start, done} & \texttt{std\_logic}, 1 bit & Signaux de commande et indication de fin.\\
-\texttt{A} & \texttt{std\_logic\_vector}, 64 bits & Bus d’entrée ; converti en \texttt{unsigned} lors du chargement.\\
-\texttt{Result} & \texttt{std\_logic\_vector}, 32 bits & Bus de sortie, relié à $Z$ par une conversion de type.\\
-$D$ (signal) & \texttt{unsigned}, $2n=64$ bits & Copie décalée de l’opérande, toujours non signée.\\
-$Z$ (signal) & \texttt{unsigned}, $n=32$ bits & Racine partielle puis résultat entier non négatif.\\
-$R$ (variable) & \texttt{signed}, $n+2=34$ bits & Reste partiel pouvant être négatif ; les bits supplémentaires servent au signe et aux opérations intermédiaires.\\
-$i$ (signal) & \texttt{integer range 0 to n-1} & Compteur borné de 0 à 31, correspondant aux 32 itérations.\\
-\texttt{curr\_state} & Type énuméré à quatre valeurs & Rend explicites les phases de commande de l’automate.\\
-\bottomrule
-\end{tabularx}
-\caption{Signaux et variable de l’architecture comportementale.}
-\label{tab:types}
-\end{table}
-
-Le paramètre générique $n$ fixe la largeur du résultat et le nombre d’itérations ; $n=32$ donne une entrée sur 64 bits. Le paquet \texttt{numeric\_std} fournit les opérations sur \texttt{signed} et \texttt{unsigned}. Les conversions et les appels à \texttt{resize} mettent les opérandes à la largeur de $R$ avant les additions, soustractions et décalages. Contrairement à la boucle décroissante du sujet, notre compteur est croissant : l’ordre des paires traitées reste identique, car il est imposé par le décalage de $D$.
-
-\clearpage
-\pagestyle{main}
-\subsection{Un seul processus et une itération par cycle}
-La commande et le calcul sont regroupés dans le processus \texttt{PCalc}, sensible à \texttt{clk} et \texttt{rst}. Hors reset, les mises à jour se font sur les fronts montants. L’affectation concurrente de \texttt{Result} à partir de $Z$ ne constitue pas un second processus de commande ; elle expose simplement le registre de résultat.
-
-\medskip
-\textbf{Pourquoi une variable pour $R$ ?} Une affectation de variable avec \texttt{:=} prend effet immédiatement dans l’exécution du processus. Le second test de signe utilise ainsi le reste qui vient d’être calculé au même front d’horloge. Une affectation de signal avec \texttt{<=}, suivie du même test dans ce processus, lirait encore l’ancienne valeur. Ce choix permet de respecter l’enchaînement de l’algorithme en un seul cycle par itération.
-
-\medskip
-La variable $R$ conserve néanmoins sa valeur entre deux activations du processus : elle représente ici une donnée mémorisée, et non une valeur automatiquement remise à zéro à chaque cycle. Les signaux $D$, $Z$ et $i$ sont également mémorisés, mais leurs nouvelles valeurs ne sont visibles qu’après l’exécution du processus. Les calculs du cycle utilisent donc l’ancien $Z$ et l’ancien $D$, conformément aux équations précédentes.
-
-\medskip
-\textbf{Interface de commande.} L’entrée $A$ doit être stable au front exécutant \texttt{init\_state}, où elle est effectivement copiée dans $D$. Elle n’est plus utilisée pendant les itérations. La sortie \texttt{Result} présente des valeurs partielles pendant le calcul ; elle doit être exploitée lorsque \texttt{done = '1'}. Maintenir \texttt{start} à 1 permet de conserver l’état de fin. Après sa remise à 0, l’automate retourne à l’attente, puis efface le résultat lors de l’exécution de cet état.
-
-\subsection{Temps de calcul et organisation du testbench}
-Le cœur du calcul réalise exactement $n$ itérations, donc $n$ cycles. Le protocole ajoute un cycle d’initialisation et un cycle pour exécuter l’état de fin et lever \texttt{done}. À partir du front qui détecte \texttt{start} dans l’état d’attente, les délais sont donc :
-\[
-N_{\mathrm{Result\ final}}=n+1,\qquad
-N_{\mathrm{done}}=n+2,\qquad
-t_{\mathrm{done}}=(n+2)T_{\mathrm{clk}}.
-\]
-Ces nombres désignent des \emph{intervalles} d’horloge depuis le front de détection. Depuis le chargement de $A$, \texttt{done} arrive après $n+1$ cycles. Le nombre d’itérations reste constant, quelle que soit la valeur de $A$.
-
-\medskip
-Dans \texttt{testbench.vhd}, $n=32$, le reset dure 5 ns et l’horloge a une période de 20 ns, soit 50 MHz en simulation. Le premier \texttt{start} est activé à 25 ns, détecté au front de 30 ns. Le déroulement déduit du code est :
-\begin{table}[H]
-\centering
-\renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Événement du premier calcul} & \textbf{Instant}\\
-\midrule
-Détection de \texttt{start} & 30 ns\\
-Chargement de $A=100$ dans \texttt{init\_state} & 50 ns\\
-Première / dernière itération & 70 ns / 690 ns\\
-Résultat final / activation de \texttt{done} & 690 ns / 710 ns\\
-\bottomrule
-\end{tabular}
-\caption{Chronologie attendue d’après le testbench et l’automate.}
-\end{table}
-Le calcul itératif représente 640 ns ; le délai entre la détection de \texttt{start} et \texttt{done} vaut 680 ns. Le second opérande, 25, est présenté à 785 ns, avec un nouveau \texttt{start} à 805 ns : sa détection est attendue à 810 ns et \texttt{done} à 1490 ns. Ces durées utilisent l’horloge du testbench ; elles ne constituent pas une mesure de fréquence maximale sur FPGA.
-
-\clearpage
-\subsubsection*{Vérification du temps de calcul en simulation}
-\textbf{Mesures relevées en simulation.} Pour $n=32$ et $T_{\mathrm{clk}}=20$ ns, les instants relevés sur les chronogrammes sont regroupés ci-dessous. Les valeurs initialement exprimées en ps sont converties en ns ($1\,000$ ps $=1$ ns). Le départ mesuré correspond à la montée de \texttt{start}, et non au front d’horloge qui accepte la demande.
-
+À 20 ns par période, cela donne 640 ns pour les itérations et 680 ns jusqu’à \texttt{done}. Dans le banc, le reset dure 5 ns. Le premier start monte à 25 ns, est accepté à 30 ns, puis $A$ est chargé à 50 ns. Les itérations vont de 70 à 690 ns et done monte à 710 ns. Pour le second calcul, start monte à 805 ns, est accepté à 810 ns et done monte à 1490 ns.
 \begin{table}[H]
 \centering
 \small
@@ -235,25 +160,11 @@ $1\,194\,877\,489$ & 25 ns & 710 ns & 685 ns\\
 \label{tab:temps-mesures}
 \end{table}
 
-Dans les deux premiers essais, \texttt{start} monte à 25 ns et est accepté au front montant de 30 ns. Dans le troisième, il monte à 805 ns et est accepté à 810 ns. Dans les trois cas, on obtient donc :
-\[
-\begin{aligned}
-t_{\mathrm{start}\uparrow\,\rightarrow\,\mathrm{done}\uparrow}
-  &=5\ \mathrm{ns}+34\times20\ \mathrm{ns}=685\ \mathrm{ns},\\
-t_{\mathrm{acceptation}\,\rightarrow\,\mathrm{done}\uparrow}
-  &=(n+2)T_{\mathrm{clk}}=680\ \mathrm{ns}.
-\end{aligned}
-\]
-Les 5 ns supplémentaires correspondent à l’attente du prochain front montant. Le cœur itératif nécessite $nT_{\mathrm{clk}}=32\times20=640$ ns ; cette durée est déduite des 32 cycles de calcul. Les mesures de 685 ns comprennent également cette attente et les cycles du protocole. Elles confirment la latence prévue par le code pour les trois opérandes relevés. Le même délai a été observé pour les autres calculs réalisés ; l’architecture effectue toujours 32 itérations, quelle que soit la valeur de $A$. Ces observations valident le temps en simulation, sans mesurer la fréquence maximale du circuit sur FPGA.
+Les 685 ns relevées comprennent 5 ns d’attente du front d’acceptation et 680 ns de protocole. Le nombre d’itérations est identique pour tous les opérandes. Ces durées correspondent à l’horloge du banc, pas à la fréquence maximale sur carte.
 
 \clearpage
-\pagestyle{main}
-\subsection{Résultats des simulations}
-\begingroup
-\setlength{\intextsep}{5pt}
-\captionsetup{skip=3pt,font=small}
-Les captures fournies montrent quatre couples d’opérandes. Le tableau~\ref{tab:resultats} compare les racines entières attendues aux résultats lisibles sur les chronogrammes. Les carrés parfaits, les petites valeurs et les valeurs non carrées permettent de vérifier plusieurs cas de fonctionnement.
-
+\subsection*{Validation en simulation}
+Les huit résultats observés sont conformes aux racines entières attendues. Le banc enregistré contient les essais 100 et 25 ; les captures documentent les autres essais.
 \begin{table}[H]
 \centering
 \small
@@ -275,7 +186,6 @@ Les captures fournies montrent quatre couples d’opérandes. Le tableau~\ref{ta
 \caption{Comparaison entre résultats attendus et lecture des captures.}
 \label{tab:resultats}
 \end{table}
-
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/100_25.png}
@@ -294,7 +204,9 @@ Les captures fournies montrent quatre couples d’opérandes. Le tableau~\ref{ta
 \caption{Essais $A=15$ puis $A=512$ : résultats entiers 3 et 22.}
 \label{fig:15512}
 \end{figure}
+
 \clearpage
+Les deux captures suivantes montrent les grands opérandes au curseur, avec leur résultat et \texttt{done=1}.
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/1194877489_4294967295.png}
@@ -309,82 +221,32 @@ Les captures fournies montrent quatre couples d’opérandes. Le tableau~\ref{ta
 \label{fig:confirmation-grand}
 \end{figure}
 
-
-\endgroup
-\pagestyle{main}
-\subsection{Bilan de la question a)}
-La description comportementale de \texttt{sqrt\_seq.vhd} regroupe la commande et le calcul dans un seul processus horlogé, \texttt{PCalc}. Les opérations portent sur des données de largeur fixe et les décalages sont constants ; aucun délai de simulation n’est utilisé dans le circuit. Chaque passage dans \texttt{comp\_state} réalise une itération complète de l’algorithme, conformément à la contrainte du sujet.
-
-\medskip
-La simulation avec $n=32$ utilise une entrée de 64 bits et un résultat de 32 bits. Les huit résultats documentés sont conformes à la racine carrée entière attendue. Les essais comprennent des carrés parfaits, les cas 0 et 1, ainsi que des nombres non carrés : $3^2\leq15<4^2$, $22^2\leq512<23^2$ et $65\,535^2\leq4\,294\,967\,295<65\,536^2$. Les figures~\ref{fig:confirmation-1194877489} et~\ref{fig:confirmation-grand} apportent les lectures au curseur des deux grands opérandes : respectivement 34\,567 et 65\,535, avec \texttt{done=1}. Le résultat est lu lorsque \texttt{done=1}. Pour construire les grands opérandes dans le banc de test sans dépasser la capacité du type entier de l’outil, un littéral hexadécimal de 64 bits peut être utilisé, par exemple \texttt{x\textquotedbl00000000FFFFFFFF\textquotedbl}.
-
-\medskip
-Le temps de calcul demandé par le sujet est de $n$ cycles pour les $n$ itérations. Avec le protocole de cette implémentation, le résultat final est disponible après $n+1$ périodes depuis l’acceptation de \texttt{start}, et \texttt{done} est levé après $n+2$ périodes. Pour $n=32$ et $T_{\mathrm{clk}}=20$ ns, cela représente 640 ns de calcul et 680 ns jusqu’à \texttt{done}. Les mesures de 685 ns depuis la montée de \texttt{start} incluent 5 ns d’attente du front d’acceptation et confirment cette estimation.
-
-\medskip
-Cette validation porte sur les valeurs simulées : le banc présent dans le dossier contient les essais 100 et 25, les autres étant documentés par les captures et les relevés de simulation. La fréquence maximale et les ressources logiques seront à mesurer lors de l’implémentation sur carte pour la question c).
-
-
 \clearpage
-\section{Architecture séquentielle structurelle}
-\subsection{Organisation de l’architecture}
-\textbf{Question b).} Le sujet demande une description structurelle comportant un chemin de données à un seul additionneur et une unité de contrôle, avec des blocs définis dans des entités séparées. Le modèle doit être validé en simulation pour $n=32$, puis son temps de calcul doit être exprimé en nombre de cycles en fonction de $n$.
-
-Nous reprenons la démarche de la partie \emph{Impose a specific architecture} du cours sur le multiplicateur : définir les registres, multiplexeurs et additionneur, concevoir leur commande, puis assembler les blocs par instanciation. L’entité principale \texttt{sqrt\_struct}, d’architecture \texttt{seq\_det}, instancie l’unité de contrôle \texttt{CU} et le chemin de données \texttt{DP}. Celui-ci instancie trois registres, trois multiplexeurs et un additionneur. Les décalages constants sont réalisés par câblage à l’entrée des registres.
-
+\section*{b) Architecture séquentielle structurelle}
+Nous séparons le chemin de données \texttt{DP} et l’unité de contrôle \texttt{CU}, instanciés dans \texttt{sqrt\_struct}. Les registres, multiplexeurs et l’additionneur sont décrits dans des entités distinctes. Le chemin de données contient trois registres, trois multiplexeurs et un seul additionneur.
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{images/chemin_donnees_QB.png}
+{\setlength{\fboxsep}{0pt}\colorbox{black}{\includegraphics[width=\linewidth]{images/chemin_donnees_QB.png}}}
 \caption{Schéma de principe du chemin de données proposé pour la question b). Les commandes de chargement et d’initialisation sont détaillées dans le texte.}
 \label{fig:qb-datapath}
 \end{figure}
 
-Les libellés \emph{Shift Left 1, 2, 3} identifient les blocs : les branches qui forment $4R$, $4D$ et $4Z$ décalent chacune de \textbf{deux bits}. Le bloc d’extraction sur $D$ fournit les deux bits de poids fort, soit $p=\lfloor D/2^{2n-2}\rfloor$. Les symboles \texttt{\&} désignent des concaténations de bits. Le premier test de signe porte sur le registre $R$, le second sur la sortie de l’additionneur, c’est-à-dire le nouveau reste. Ces tests ne coupent pas les bus de données : ils en prélèvent seulement le bit de signe.
+\subsection*{Un seul additionneur}
+Avec $W=n+2$ bits pour le reste, nous formons :
+\[
+X=(4R)\operatorname{OR}p,\qquad
+Y=\begin{cases}\operatorname{NOT}(4Z),&R\geq0,\\4Z+3,&R<0,\end{cases}
+\qquad R'=X+Y.
+\]
+Le OR remplace l’addition de $p$, car les deux bits bas de $4R$ sont nuls. Les concaténations $Z\,\&\,\texttt{00}$ et $Z\,\&\,\texttt{11}$ forment $4Z$ et $4Z+3$. L’identité $\operatorname{NOT}(x)=-x-1$ modulo $2^W$ permet d’obtenir $-(4Z+1)$ sans second additionneur.
 
-\begin{table}[H]
-\centering
-\small
-\begin{tabularx}{\linewidth}{@{}p{4cm}X@{}}
-\toprule
-\textbf{Entité VHDL} & \textbf{Fonction}\\
-\midrule
-\texttt{sqrt\_struct} & Assemblage de CU et DP ; interface clk, reset, start, A, S, done.\\
-\texttt{unite\_controle} & Automate, compteur d’itérations et commandes init/calcul.\\
-\texttt{chemin\_donnees} & Connexions des blocs et formation des valeurs suivantes de R, D et Z.\\
-\texttt{registre} & Mémoire avec reset asynchrone, remise à zéro synchrone et chargement.\\
-\texttt{mux2\_1} & Sélection combinatoire entre deux entrées.\\
-\texttt{additionneur} & Addition à largeur fixe ; une seule instance dans DP.\\
-\bottomrule
-\end{tabularx}
-\caption{Décomposition de l’architecture en entités séparées.}
-\end{table}
+Le signe de l’ancien reste sélectionne $Y$. Celui du nouveau reste sélectionne le bit ajouté à $Z$ : $Z'=2Z+b$. Les tests de signe prélèvent une information sur les bus, sans interrompre le trajet des données. Le multiplexeur de $D$ choisit entre le chargement de $A$ et le décalage de deux bits. Sur le schéma, \texttt{\&} représente une concaténation.
+
+Les trois registres sont mis à jour au même front. Le compteur se trouve dans CU, en dehors du chemin de données limité à un additionneur. Les largeurs restent celles de QA : 64 bits pour $D$, 32 pour $Z$ et 34 pour $R$.
 
 \clearpage
-\subsection{Réaliser l’itération avec un seul additionneur}
-On conserve les registres $D$ sur $2n$ bits, $Z$ sur $n$ bits et $R$ sur $W=n+2$ bits. Pour $n=32$, cela donne respectivement 64, 32 et 34 bits. Avec $p$ égal à la paire supérieure de $D$, les deux opérandes de l’additionneur sont :
-\[
-X=(4R)\operatorname{OR}p,
-\qquad
-Y=\begin{cases}
-\operatorname{NOT}(4Z), & R\geq0,\\
-4Z+3, & R<0.
-\end{cases}
-\qquad R_{\mathrm{suivant}}=X+Y.
-\]
-Les deux bits bas de $4R$ sont nuls et $p$ n’occupe que ces deux bits : le OR réalise donc ici $4R+p$ sans additionneur supplémentaire. Les opérandes sont ramenés à $W$ bits.
-
-\medskip
-Les concaténations $Z\,\&\,\texttt{00}$ et $Z\,\&\,\texttt{11}$ donnent respectivement $4Z$ et $4Z+3$. En complément à deux, $\operatorname{NOT}(x)=-x-1$ modulo $2^W$ ; l’inversion de $4Z$ produit donc $-(4Z+1)$. Le multiplexeur \texttt{MUX2}, commandé par le signe de l’ancien reste, choisit $Y$. L’unique instance \texttt{ADD} calcule alors le nouveau reste.
-
-\medskip
-Le signe de ce nouveau reste sélectionne, via \texttt{MUX1}, le bit $b$ ajouté à la racine : $b=1$ si $R_{\mathrm{suivant}}\geq0$, et $b=0$ sinon. La valeur suivante de $Z$ est obtenue en concaténant les $n-1$ bits bas de $Z$ avec $b$, soit $2Z+b$. De même, $D$ est décalé de deux bits pour présenter la paire suivante. Un troisième multiplexeur, \texttt{MUX\_D}, sélectionne $A$ à l’initialisation ou $D$ décalé pendant le calcul ; il complète le schéma de principe.
-
-\medskip
-Les trois registres mémorisent leurs nouvelles valeurs au même front de calcul. Les décalages ne nécessitent donc aucun état supplémentaire. Le décrément du compteur appartient à l’unité de contrôle ; la contrainte d’un seul additionneur concerne le chemin de données. L’addition sur $W$ bits est modulaire : après $k$ itérations, $0\leq Z\leq2^k-1$ et $-(2Z+1)\leq R\leq2Z$, ce qui permet de représenter le reste dans $n+2$ bits.
-
-\subsection{Unité de contrôle suivant le modèle du cours}
-Comme dans l’exemple du cours, la commande sépare la mémorisation de l’état (\texttt{CSM}), le calcul de l’état suivant (\texttt{NSC}) et le calcul des sorties (\texttt{OC}). Les sorties \texttt{init}, \texttt{calcul} et \texttt{done} sont combinatoires à partir de l’état : elles changent après la transition d’état et sont disponibles avant le prochain front de chargement des registres.
-
+\subsection*{Commande et temps de calcul}
+Comme dans le cours, \texttt{CSM} mémorise l’état, \texttt{NSC} calcule l’état suivant et \texttt{OC} fournit les commandes combinatoires.
 \begin{table}[H]
 \centering
 \small
@@ -401,24 +263,17 @@ Comme dans l’exemple du cours, la commande sépare la mémorisation de l’ét
 \caption{États et commandes de l’unité de contrôle de QB.}
 \end{table}
 
-Le reset remet l’automate en attente et annule les données des registres. Les signes RC0 et RC1 commandent directement les multiplexeurs de DP ; ils n’interviennent pas dans les transitions d’état. L’organisation du cours est adaptée à la racine carrée : les états de décalage du multiplicateur ne sont pas nécessaires ici.
+Le reset remet l’automate en attente et les registres à zéro. Les signaux RC0 et RC1 commandent les multiplexeurs de DP ; ils ne modifient pas les transitions de l’automate.
 
-\clearpage
-\subsection{Estimation du temps de calcul}
-Soit F0 le front montant qui accepte \texttt{start} dans l’état d’attente. L’automate entre en initialisation. Au front F1, $A$ est capturé et les registres sont initialisés. La première itération est réalisée à F2 et la dernière à F$(n+1)$. À ce dernier front, l’automate entre dans \texttt{end\_state} et \texttt{done} monte après stabilisation des signaux combinatoires.
+Depuis le front F0 acceptant start, F1 charge l’entrée et initialise les registres. Les $n$ itérations ont lieu de F2 à F$(n+1)$. À ce dernier front, l’entrée dans l’état final active done :
 \[
-N_{\mathrm{itérations}}=n,\qquad
-N_{\mathrm{acceptation}\rightarrow\mathrm{done}}=n+1,
-\qquad t_{\mathrm{acceptation}\rightarrow\mathrm{done}}=(n+1)T_{\mathrm{clk}}.
+t_{\mathrm{itérations}}=nT_{\mathrm{clk}},\qquad
+ t_{\mathrm{acceptation}\rightarrow\mathrm{done}}=(n+1)T_{\mathrm{clk}}.
 \]
-Pour $n=32$, le calcul comporte donc 32 cycles et la latence jusqu’à \texttt{done} est de 33 périodes depuis F0. Le banc QB utilise une période de 10 ns : les durées théoriques sont 320 ns pour le calcul et 330 ns depuis l’acceptation jusqu’à \texttt{done}. Une mesure depuis la montée de \texttt{start} inclut en plus l’attente du front F0. Les mesures présentées ci-après permettent de vérifier cette estimation.
+Pour $n=32$ et une période de 10 ns, nous obtenons 320 ns d’itérations et 330 ns jusqu’à done. QB gagne une période de protocole par rapport à QA, car done est décodé dès l’entrée dans l’état final.
 
-\medskip
-Dans QA, \texttt{done} est affecté au front exécutant l’état final ; dans QB, il est décodé dès l’entrée dans cet état. La latence du protocole est ainsi réduite d’une période. Cette comparaison en cycles ne suffit pas à conclure sur les performances sur carte : les fréquences maximales et les ressources relèvent de la question c).
-
-\subsection{Validation en simulation avec n=32}
-La simulation est réalisée dans ModelSim avec le banc \texttt{tb\_sqrt\_struct.vhd}, une entrée sur 64 bits et une sortie sur 32 bits. Le script \texttt{simuler\_modelsim.do} compile les blocs en VHDL-93, charge le banc et affiche les signaux. Le banc comporte 17 calculs vérifiés par assertions : petites valeurs, carrés et voisins, opérandes dépassant 32 bits et valeur maximale sur 64 bits. Il contrôle aussi les 32 itérations par calcul, la capture de l’entrée, le maintien du résultat, le reset en cours d’opération et le redémarrage.
-
+\subsection*{Validation du banc}
+Le banc \texttt{tb\_sqrt\_struct.vhd} vérifie 17 calculs, dont des carrés, leurs voisins et la valeur maximale sur 64 bits. Les assertions contrôlent aussi les 32 itérations, la capture de l’entrée, le maintien du résultat, le reset pendant un calcul et le redémarrage.
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/QB/confirmation_banc.png}
@@ -426,12 +281,11 @@ La simulation est réalisée dans ModelSim avec le banc \texttt{tb\_sqrt\_struct
 \label{fig:qb-pass}
 \end{figure}
 
-La figure~\ref{fig:qb-pass} montre que le banc atteint son message de réussite. Les avertissements visibles concernent uniquement un fichier de chronogrammes WLF déjà utilisé : ModelSim annonce l’emploi d’un fichier alternatif. L’instant de 6\,346 ns correspond à la fin de la campagne de tests, et non à la durée d’un calcul.
+Le message PASS apparaît à 6\,346 ns, à la fin de l’ensemble des essais. Les avertissements concernent le fichier WLF déjà utilisé ; ModelSim en ouvre un autre. Ils ne signalent pas une erreur de calcul.
 
 \clearpage
-\subsection{Résultats observés sur les chronogrammes}
-Les captures associent, pour chaque essai, la valeur d’entrée lors de la montée de \texttt{start} et le résultat à la montée de \texttt{done}. Le banc inverse volontairement $A$ après sa capture pour vérifier que le circuit utilise la donnée mémorisée : la grande valeur visible sur $A$ à la fin ne constitue donc pas un nouvel opérande pour le calcul en cours. De même, la valeur de $S$ au départ peut être le résultat de l’essai précédent ; seule sa lecture lorsque \texttt{done=1} valide le résultat courant.
-
+\subsection*{Résultats et captures au curseur}
+Le banc modifie volontairement $A$ après son chargement pour vérifier que le calcul utilise la valeur mémorisée. La valeur affichée ensuite sur l’entrée ne correspond donc plus à l’opérande en cours. Le résultat se lit lorsque done vaut 1.
 \begin{table}[H]
 \centering
 \small
@@ -449,10 +303,6 @@ $4\,294\,967\,296$ & $65\,536$ & $65\,536$ & Conforme\\
 \caption{Comparaison des résultats attendus et observés pour quatre opérandes représentatifs.}
 \label{tab:qb-resultats}
 \end{table}
-
-\begingroup
-\setlength{\intextsep}{6pt}
-\captionsetup{font=small,skip=3pt}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/QB/start_0.png}
@@ -473,15 +323,8 @@ $4\,294\,967\,296$ & $65\,536$ & $65\,536$ & Conforme\\
 \includegraphics[width=\linewidth]{images/QB/done_15.png}
 \caption{Essai $A=15$ : $S=3$ et done=1 à 2\,445\,000 ps.}
 \end{figure}
-\endgroup
 
 \clearpage
-\subsubsection*{Carré parfait et opérande supérieur à 32 bits}
-L’essai $A=100$ vérifie un carré parfait : $10^2=100$. L’essai $A=4\,294\,967\,296=2^{32}$ met en jeu un opérande qui nécessite plus de 32 bits ; le résultat est $65\,536=2^{16}$. Avec $A=15$, pour lequel $3^2\leq15<4^2$, ces cas illustrent le calcul de la racine carrée entière sur des valeurs de natures différentes.
-
-\begingroup
-\setlength{\intextsep}{8pt}
-\captionsetup{font=small,skip=3pt}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/QB/start_100.png}
@@ -502,43 +345,21 @@ L’essai $A=100$ vérifie un carré parfait : $10^2=100$. L’essai $A=4\,294\,
 \includegraphics[width=\linewidth]{images/QB/done_4294967296.png}
 \caption{Essai $A=4\,294\,967\,296$ : $S=65\,536$ et done=1 à 4\,195\,000 ps.}
 \end{figure}
-\endgroup
 
 \clearpage
-\subsection{Vérification du compteur et du temps de calcul}
-La figure~\ref{fig:qb-etats} détaille la fin d’une opération et le lancement de l’essai $A=9$. En calcul, le compteur descend jusqu’à zéro. L’itération correspondant à $i=0$ est exécutée avant l’entrée dans \texttt{end\_state}, où \texttt{done} monte. Le retour passe ensuite par \texttt{wait\_state}, puis par \texttt{init\_state}. Au front d’initialisation du calcul suivant, $i$ est rechargé à 31, puis décrémenté à chaque itération.
-
+\subsection*{Mesures temporelles}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/QB/etats_compteur.png}
 \caption{Détail des transitions et du compteur : fin de calcul avec $i=3,2,1,0$, puis initialisation du calcul de $A=9$ avec $i=31$.}
 \label{fig:qb-etats}
 \end{figure}
-
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/QB/mesure_339ns.png}
 \caption{Calcul de $A=9$ : mesure entre la montée de start à 1\,756\,000 ps et celle de done à 2\,095\,000 ps ; $S=3$ en fin de calcul.}
 \label{fig:qb-temps}
 \end{figure}
-
-Pour cet essai, start monte à 1\,756 ns et est accepté au front suivant à 1\,765 ns. L’initialisation est réalisée à 1\,775 ns et done monte à 2\,095 ns. Le délai de 339\,000 ps mesuré avec les deux curseurs se décompose ainsi :
-\[
-\begin{aligned}
-t_{\mathrm{start}\uparrow\rightarrow\mathrm{done}\uparrow}
-  &=2\,095-1\,756=339\ \mathrm{ns},\\
-t_{\mathrm{acceptation}\rightarrow\mathrm{done}\uparrow}
-  &=2\,095-1\,765=330\ \mathrm{ns}=33T_{\mathrm{clk}},\\
-t_{\mathrm{calcul}}
-  &=2\,095-1\,775=320\ \mathrm{ns}=32T_{\mathrm{clk}}.
-\end{aligned}
-\]
-Les 9 ns supplémentaires entre la montée de start et son acceptation proviennent de la position du stimulus entre deux fronts d’horloge. Elles ne constituent pas une itération supplémentaire.
-
-\clearpage
-\subsection{Synthèse des mesures et bilan de la question b)}
-Les quatre autres couples de captures donnent le même délai de 339 ns entre start et done. Le tableau~\ref{tab:qb-temps} regroupe les instants relevés, convertis en ns ($1\,000$ ps $=1$ ns), et les fronts d’acceptation déduits de l’horloge de période 10 ns.
-
 \begin{table}[H]
 \centering
 \small
@@ -558,15 +379,184 @@ $4\,294\,967\,296$ & $3\,856$ ns & $3\,865$ ns & $4\,195$ ns & 339 ns\\
 \label{tab:qb-temps}
 \end{table}
 
-Dans tous les cas, le délai depuis le front d’acceptation est de 330 ns, soit $n+1=33$ périodes. Les $n=32$ itérations occupent 320 ns. La durée est indépendante de l’opérande : le circuit traite systématiquement les 32 paires de bits, y compris pour les petites valeurs.
+Pour chaque essai, la montée de start précède de 9 ns le front d’acceptation. Nous mesurons donc $339=9+33\times10$ ns jusqu’à done. Le compteur et les états confirment les 32 itérations. Les contrôles du reset et du maintien de start sont couverts par le banc, sans capture dédiée.
 
-\medskip
-L’architecture répond à la décomposition structurelle demandée : le sommet instancie CU et DP, et le chemin de données utilise des entités distinctes pour les registres, les multiplexeurs et l’unique additionneur. La transformation des équations en concaténations, inversion et sélection permet d’effectuer une itération complète par cycle avec cette unique instance d’addition. L’unité de contrôle suit la séparation CSM/NSC/OC du cours et fournit les commandes combinatoires aux registres.
+\clearpage
+\section*{c) Implantation et comparaison sur FPGA}
+Cette question compare QA et QB sur une même carte DE1 ou DE2-70, avec une entrée de 64 bits ($n=32$). Les fréquences maximales et les ressources doivent provenir de la compilation Quartus après placement-routage.
 
-\medskip
-La validation ModelSim avec $n=32$ est confirmée par les résultats au curseur, l’évolution du compteur et le message de réussite des 17 calculs. Les contrôles de reset, de maintien de start et de redémarrage sont réalisés par les assertions du banc ; ils ne font pas ici l’objet de captures spécifiques. Les mesures sont conformes à l’estimation générale : $n$ cycles de calcul et $n+1$ périodes jusqu’à done depuis l’acceptation de start.
+Depuis l’acceptation de start, nos architectures prennent respectivement 34 et 33 périodes jusqu’à done. Avec les fréquences maximales exprimées en MHz :
+\[
+t_A\ \mathrm{(ns)}=\frac{34\,000}{F_{\max,A}\ \mathrm{(MHz)}},\qquad
+ t_B\ \mathrm{(ns)}=\frac{33\,000}{F_{\max,B}\ \mathrm{(MHz)}}.
+\]
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}lXXXX@{}}
+\toprule
+Architecture & $F_{\max}$ (MHz) & Éléments logiques & Registres \\
+\midrule
+QA & 115 MHz & 312 & 139 \\
+QB & 152 MHz & 211 & 138 \\
+\bottomrule
+\end{tabularx}
+\caption{Comparaison des deux architectures sur FPGA.}
+\end{table}
+Les périodes choisies dans ModelSim, 20 ns pour QA et 10 ns pour QB, ne suffisent pas pour conclure à un gain sur carte.
 
-\medskip
-Par rapport à QA, dont done est enregistré au front exécutant l’état final, QB signale la fin dès l’entrée dans cet état et économise une période de protocole. Les périodes des bancs étant différentes (20 ns pour QA et 10 ns pour QB), les durées en ns ne permettent pas de conclure à un gain de fréquence sur FPGA. La comparaison des temps à fréquence maximale et du nombre de blocs logiques nécessite la synthèse et l’implémentation sur carte demandées en question c).
+\textbf{À compléter :} référence de la carte et du FPGA, rapports Quartus de ressources et de fréquence maximale pour les deux versions, preuve de fonctionnement sur carte et conclusion sur le compromis taille/temps de calcul.
 
+\clearpage
+\part*{TP2 : Nios II}
+Nous reprenons le calcul de racine carrée pour comparer une exécution logicielle sur Nios II et plusieurs intégrations du circuit VHDL. Les configurations avec caches de 512 octets sont exclues du tableau demandé.
+
+\section*{1) Prise en main et ports d’entrée/sortie}
+La copie des dix switches vers les LED rouges fonctionne sur carte. Le code disponible effectue cette copie en boucle. Le sujet demande aussi un troisième PIO de 1 bit indiquant qu’une nouvelle donnée est disponible, puis une comparaison sur Nios fast sans cache et avec cache.
+
+\textbf{À compléter :} code utilisant ce signal, capture Qsys et observations avec/sans cache. Préciser les connexions, les adresses des PIO et la configuration du processeur.
+
+\section*{2) Exécution logicielle de la racine carrée}
+\subsection*{Premiers essais}
+Le programme \texttt{hello\_world\_sqrt.c} reprend l’algorithme du TP1 sans flottants. Cette première version utilise une entrée de 64 bits, un résultat de 32 bits et 32 itérations. Le reste est signé sur 64 bits ; $4R$ est calculé par multiplication pour éviter le décalage d’un entier signé négatif en C.
+
+Nous appelons \texttt{alt\_timestamp\_start()} puis lisons le compteur avant et après le calcul. Le timer fonctionne à 50\,000\,000 Hz, soit 20 ns par tick. Les affichages restent hors mesure. L’intervalle inclut l’appel, les accès à l’entrée et au résultat et le coût du chronométrage. Chaque opérande n’a été mesuré qu’une fois.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{images/nios2/resultats_racine.png}
+\caption{Résultats du programme C sur Nios II avec un compteur timestamp à 50 MHz.}
+\label{fig:nios-resultats}
+\end{figure}
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}r r r r r r r l@{}}
+\toprule
+\textbf{$A$} & \textbf{Racine} & \textbf{Attendu} & \textbf{Début} & \textbf{Fin} & \textbf{Ticks} & \textbf{Temps (ns)} & \textbf{État}\\
+\midrule
+0 & 0 & 0 & 121 & 4823 & 4702 & 94\,040 & OK\\
+1 & 1 & 1 & 148 & 4824 & 4676 & 93\,520 & OK\\
+15 & 3 & 3 & 146 & 4849 & 4703 & 94\,060 & OK\\
+512 & 22 & 22 & 146 & 4866 & 4720 & 94\,400 & OK\\
+1\,194\,877\,489 & 34\,567 & 34\,567 & 146 & 4949 & 4803 & 96\,060 & OK\\
+4\,294\,967\,295 & 65\,535 & 65\,535 & 158 & 5043 & 4885 & 97\,700 & OK\\
+\bottomrule
+\end{tabular}
+\caption{Relevés de la console ; les colonnes début, fin et ticks sont exprimées en ticks du timer.}
+\label{tab:nios-resultats}
+\end{table}
+
+Les six résultats sont corrects. Les temps vont de 93,52 à 97,70~$\mu$s, soit un écart de 4,18~$\mu$s. Une itération en C demande plusieurs instructions ; elle ne correspond pas à un cycle FPGA. Ces essais ne permettent pas d’isoler l’effet des branches, des caches ou des interruptions.
+
+\clearpage
+\subsection*{2a) Lecture du timer}
+Nous avons comparé \texttt{alt\_timestamp()} à notre fonction \texttt{mon\_timestamp}, qui capture le compteur puis lit ses deux moitiés. Le code visible sur la photo inverse ensuite la valeur reconstituée pour obtenir un compte croissant. Le timer fonctionne à 50 MHz, soit 20 ns par tick.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}rrr@{}}
+\toprule
+Mesure & \texttt{alt\_timestamp()} (ticks) & \texttt{mon\_timestamp} (ticks)\\
+\midrule
+1 & 124 & 82\\
+2 & 77 & 40\\
+3 & 75 & 40\\
+4 & 75 & 40\\
+
+\bottomrule
+\end{tabular}
+\caption{Coût de lecture du timer relevé dans la console Nios II.}
+\end{table}
+
+Le premier relevé est plus élevé pour les deux méthodes. Le programme l’exclut de sa moyenne et retient les mesures 2 à 8. Pour \texttt{alt\_timestamp()}, leur moyenne exacte vaut $527/7\simeq75{,}29$ ticks, soit environ 1\,506 ns ; la console affiche 75 ticks après troncature entière. Pour \texttt{mon\_timestamp}, les sept mesures valent toutes 40 ticks, soit 800 ns.
+
+Nous retenons donc \texttt{mon\_timestamp} pour la suite : sur ces mesures, son coût est environ 47\,\% plus faible, soit un rapport d’environ 1,88 entre les temps. Le relevé seul ne permet pas d’expliquer le surcoût de la première lecture ni d’isoler le coût du chronométrage.
+
+\textbf{À compléter :} code complet du test, configuration du Nios et des caches, fréquence CPU et options de compilation. La photo montre le code de lecture et les résultats, mais pas l’ensemble du protocole de mesure.
+
+\clearpage
+\subsection*{2b) Comparaison des configurations}
+Le benchmark demandé utilise 200 entrées $A[i]=i^2$, pour $i$ de 0 à 199. Nous devons répéter le traitement 100 fois, stocker les résultats dans un second tableau remis à zéro à chaque essai, et vérifier $S[i]=i$.
+\[
+\overline{t}_{\mathrm{racine}}=\frac{t_{\mathrm{lot}}}{20\,000},\qquad
+ t_{\mathrm{lot}}=\frac{\Delta\mathrm{ticks}}{f_{\mathrm{timer}}}.
+\]
+Le sujet TP2 porte sur une entrée de 32 bits, soit $n=16$ pour cet algorithme. La largeur et le nombre d’itérations du programme définitif restent à confirmer avec le code utilisé. Les six mesures précédentes sur 64 bits sont conservées comme essais préliminaires.
+
+Les instructions et les données sont placées ensemble en Onchip, SSRAM ou SDRAM dans le Linker Script du BSP. Pour Nios f, le cache de données doit être réalisé en registres, pas en blocs M4K. Chaque case ci-dessous recevra les temps moyens avec et sans appel à \texttt{mon\_sqrt}.
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+Instructions + données & Nios e & Nios s, cache instr. 2 ko & Nios f, caches instr. + données 2 ko\\
+\midrule
+Onchip & 504 µs & 113 µs & 79 µs\\
+SSRAM & 660 µs & -- & 79 µs\\
+SDRAM & 1,5 ms & 301 µs & 79 µs\\
+\bottomrule
+\end{tabularx}
+\caption{Temps moyen par racine sur 20\,000 calculs : avec / sans appel de fonction.}
+\end{table}
+
+La mesure du Nios s avec cache d’instructions de 2 ko et mémoire SSRAM n’a pas pu être obtenue pendant la séance. Un problème logiciel ou d’initialisation des échanges avec la SRAM pourrait expliquer ce blocage, sans que nous ayons pu en confirmer la cause. Plusieurs reprogrammations du FPGA et relancements du programme auraient peut-être permis d’obtenir une valeur, mais le temps restant en TP ne nous a pas permis de poursuivre ces essais. Nous laissons donc cette case sans résultat.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+Instructions + données & Nios e & Nios s, 2 ko & Nios f, 2 ko\\
+\midrule
+Eléments logiques & 3 098 & 3 959 & 4 678\\
+Ressources mémoire utilisés & 142 336 & 160 128 & 178 304\\
+\bottomrule
+\end{tabularx}
+\caption{Éléments logiques / ressources mémoire utilisés ; préciser l’unité des ressources mémoire.}
+\end{table}
+
+\textbf{À compléter :} les neuf couples de mesures, les ressources Quartus, les captures du placement mémoire, les fréquences CPU/timer et les options de compilation. Vérifier que le compilateur conserve les 20\,000 calculs et l’appel de fonction dans la variante concernée. Identifier ensuite la configuration la plus rapide.
+
+\clearpage
+\section*{3) Utilisation d’un coprocesseur}
+\subsection*{3a) Attente active}
+Le sujet demande de reprendre la meilleure configuration du 2b et d’y raccorder le calculateur VHDL par des PIO. Le Nios envoie l’opérande et start, surveille done, puis lit le résultat et le stocke dans le tableau. Le temps mesuré comprend ces échanges et l’attente du calcul.
+
+\textbf{À compléter :} codes C/VHDL, schéma Qsys, protocole de commande, mesures sur le benchmark et comparaison avec le logiciel.
+
+\subsection*{3b) Interruption (optionnel)}
+Cette variante utilise une interruption sur done pour récupérer le résultat.
+
+\textbf{À compléter si réalisée :} routine d’interruption, acquittement et temps mesuré. Sinon, indiquer que cette option n’a pas été réalisée.
+
+\section*{4) Instruction personnalisée}
+Le calculateur VHDL doit être intégré comme instruction personnalisée multicycle du Nios, puis appelé depuis le programme C.
+
+\textbf{À compléter :} adaptation VHDL, configuration de l’instruction, appel en C, temps mesuré et comparaison avec les versions précédentes.
+
+\section*{5) Composant directement intégré dans Qsys}
+Le module doit être raccordé directement au système Nios sans passer par les PIO. Le rapport précisera l’interface réalisée et les accès à l’opérande, à la commande, à l’état et au résultat.
+
+\textbf{À compléter :} codes, interface du composant, carte des registres, capture Qsys et mesures.
+
+\subsection*{Bilan du TP2}
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}Xlll@{}}
+\toprule
+Réalisation & Temps moyen & Gain logiciel & Ressources\\
+\midrule
+Meilleure version logicielle & À compléter & 1 & À compléter\\
+Coprocesseur par PIO, attente active & À compléter & À compléter & À compléter\\
+Instruction personnalisée multicycle & À compléter & À compléter & À compléter\\
+Composant directement intégré dans Qsys & À compléter & À compléter & À compléter\\
+\bottomrule
+\end{tabularx}
+\caption{Bilan sur le même jeu de données et le même nombre de calculs.}
+\end{table}
+
+Le gain sera calculé par $\overline{t}_{\mathrm{logiciel}}/\overline{t}_{\mathrm{version\ étudiée}}$, sur le même benchmark. Les mesures manquantes permettront de comparer le coût logiciel, les échanges avec le circuit et les ressources utilisées.
+
+\textbf{À compléter :} résultats du tableau et conclusion.
 \end{document}
